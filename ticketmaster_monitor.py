@@ -8,15 +8,6 @@ from playwright.async_api import (
 
 
 # ============================================================
-# CONFIGURACIÓN
-# ============================================================
-
-PROFILE_DIR = r"C:\Users\user\Desktop\ticketmaster app\ticketmaster_profile"
-
-CHECK_INTERVAL = 60  # segundos
-
-
-# ============================================================
 # EVENTOS
 # ============================================================
 
@@ -70,8 +61,6 @@ async def check_fontaines(page, url):
 
     print("   Esperando resultados...")
 
-    # Ticketmaster necesita unos segundos para cargar
-    # el estado de disponibilidad.
     await page.wait_for_timeout(20000)
 
     no_results = await page.get_by_text(
@@ -117,9 +106,7 @@ async def check_phoebe(page, url):
 
     except PlaywrightTimeoutError:
 
-        print(
-            "   ⚠️ No apareció Full Price Ticket"
-        )
+        print("   ⚠️ No apareció Full Price Ticket")
 
         return None
 
@@ -140,15 +127,13 @@ async def check_phoebe(page, url):
 
     except PlaywrightTimeoutError:
 
-        print(
-            "   ⚠️ No apareció quantity stepper"
-        )
+        print("   ⚠️ No apareció quantity stepper")
 
         return None
 
 
     # --------------------------------------------------------
-    # Cantidad
+    # Cantidad 2 → 1
     # --------------------------------------------------------
 
     try:
@@ -165,7 +150,6 @@ async def check_phoebe(page, url):
             f"   Cantidad actual: {quantity}"
         )
 
-
         if quantity == "2":
 
             minus = stepper.locator(
@@ -174,13 +158,9 @@ async def check_phoebe(page, url):
 
             if await minus.count() > 0:
 
-                await minus.click(
-                    force=True
-                )
+                await minus.click(force=True)
 
-                await page.wait_for_timeout(
-                    500
-                )
+                await page.wait_for_timeout(500)
 
                 print(
                     "   Cantidad cambiada a 1"
@@ -210,9 +190,7 @@ async def check_phoebe(page, url):
 
         await find_tickets.click()
 
-        print(
-            "   Find Tickets → OK"
-        )
+        print("   Find Tickets → OK")
 
     except PlaywrightTimeoutError:
 
@@ -270,17 +248,11 @@ async def check_phoebe(page, url):
                 'input[type="checkbox"]'
             ).last
 
-            checked = await checkbox.is_checked()
+            if not await checkbox.is_checked():
 
-            if not checked:
+                await label.click(force=True)
 
-                await label.click(
-                    force=True
-                )
-
-                await page.wait_for_timeout(
-                    300
-                )
+                await page.wait_for_timeout(300)
 
                 print(
                     "   Términos → aceptados"
@@ -333,15 +305,13 @@ async def check_phoebe(page, url):
     # Verified Resale Ticket
     # --------------------------------------------------------
 
+    listings = page.get_by_text(
+        "Verified Resale Ticket",
+        exact=True,
+    )
+
     try:
 
-        listings = page.get_by_text(
-            "Verified Resale Ticket",
-            exact=True,
-        )
-
-        # IMPORTANT:
-        # Hay múltiples listings, por lo que usamos .first.
         await listings.first.wait_for(
             timeout=30000
         )
@@ -354,10 +324,6 @@ async def check_phoebe(page, url):
 
         return False
 
-
-    # --------------------------------------------------------
-    # Contar listings
-    # --------------------------------------------------------
 
     count = await listings.count()
 
@@ -372,9 +338,9 @@ async def check_phoebe(page, url):
 # COMPROBAR EVENTO
 # ============================================================
 
-async def check_event(context, event):
+async def check_event(browser, event):
 
-    page = await context.new_page()
+    page = await browser.new_page()
 
     try:
 
@@ -408,134 +374,55 @@ async def check_event(context, event):
 
 
 # ============================================================
-# MONITOR
+# MAIN
 # ============================================================
 
 async def main():
 
-    print(
-        "=========================================="
-    )
-
-    print(
-        "      TICKETMASTER RESALE MONITOR"
-    )
-
-    print(
-        "=========================================="
-    )
-
+    print("==========================================")
+    print("      TICKETMASTER RESALE MONITOR")
+    print("==========================================")
     print()
 
     print(
-        f"Eventos: {len(EVENTS)}"
-    )
-
-    print(
-        f"Intervalo: {CHECK_INTERVAL} segundos"
+        datetime.now().strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
     )
 
     print()
-
 
     async with async_playwright() as p:
 
-        # ----------------------------------------------------
-        # Perfil persistente
-        # ----------------------------------------------------
-
-        context = await p.chromium.launch_persistent_context(
-            PROFILE_DIR,
-            headless=False,
+        browser = await p.chromium.launch(
+            headless=True,
         )
 
-
-        # ----------------------------------------------------
-        # Estado anterior
-        # ----------------------------------------------------
-
-        previous_state = {
-            event["name"]: None
-            for event in EVENTS
-        }
-
-
-        # ====================================================
-        # LOOP INFINITO
-        # ====================================================
-
-        while True:
-
-            print()
-
-            print(
-                "=========================================="
-            )
-
-            print(
-                datetime.now().strftime(
-                    "%Y-%m-%d %H:%M:%S"
-                )
-            )
-
-            print(
-                "=========================================="
-            )
-
-
-            # ------------------------------------------------
-            # Revisar cada evento
-            # ------------------------------------------------
+        try:
 
             for event in EVENTS:
 
                 print()
-
                 print(
                     f"→ {event['name']}"
                 )
 
-
-                available = await check_event(
-                    context,
+                result = await check_event(
+                    browser,
                     event,
                 )
 
-
-                # --------------------------------------------
-                # DISPONIBLE
-                # --------------------------------------------
-
-                if available is True:
+                if result is True:
 
                     print(
                         "   🎟️ DISPONIBILIDAD DETECTADA"
                     )
 
-
-                    if previous_state[
-                        event["name"]
-                    ] is False:
-
-                        print(
-                            "   🚨 CAMBIO: NO → SÍ"
-                        )
-
-
-                # --------------------------------------------
-                # NO DISPONIBLE
-                # --------------------------------------------
-
-                elif available is False:
+                elif result is False:
 
                     print(
                         "   ❌ Sin tickets"
                     )
-
-
-                # --------------------------------------------
-                # ERROR
-                # --------------------------------------------
 
                 else:
 
@@ -543,36 +430,10 @@ async def main():
                         "   ⚠️ No se pudo determinar"
                     )
 
+        finally:
 
-                # --------------------------------------------
-                # Actualizar estado
-                # --------------------------------------------
+            await browser.close()
 
-                if available is not None:
-
-                    previous_state[
-                        event["name"]
-                    ] = available
-
-
-            # ------------------------------------------------
-            # Esperar próximo ciclo
-            # ------------------------------------------------
-
-            print()
-
-            print(
-                f"Esperando {CHECK_INTERVAL} segundos..."
-            )
-
-            await asyncio.sleep(
-                CHECK_INTERVAL
-            )
-
-
-# ============================================================
-# EJECUTAR
-# ============================================================
 
 if __name__ == "__main__":
 
